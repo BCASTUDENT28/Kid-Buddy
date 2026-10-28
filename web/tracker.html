@@ -326,39 +326,53 @@
 
       btn.className = 'sharing-toggle-btn active';
       btn.innerHTML = '<span class="pulse-dot"></span><span>LIVE SHARING ACTIVE (TAP TO STOP)</span>';
-      badge.innerText = '🟢 Streaming Live';
+      badge.innerText = '🟢 GPS Connected';
       isTracking = true;
 
+      function onPositionSuccess(pos) {
+        const lat = pos.coords.latitude;
+        const lng = pos.coords.longitude;
+        const speed = Math.round((pos.coords.speed || 0) * 3.6);
+        const acc = Math.round(pos.coords.accuracy || 10);
+
+        document.getElementById('disp-lat').innerText = lat.toFixed(6);
+        document.getElementById('disp-lng').innerText = lng.toFixed(6);
+        document.getElementById('disp-speed').innerText = `${speed} km/h`;
+        document.getElementById('disp-acc').innerText = `± ${acc} m`;
+        badge.innerText = '🟢 Streaming Live GPS';
+
+        sendLocationPayload({
+          lat,
+          lng,
+          speed,
+          accuracy: acc,
+          battery: currentBattery
+        });
+      }
+
+      // 1. Immediate Network / Cell / Wi-Fi fix (works inside buildings & rooms)
+      navigator.geolocation.getCurrentPosition(
+        onPositionSuccess,
+        (err) => console.warn('Fast fix note:', err.message),
+        { enableHighAccuracy: false, timeout: 8000, maximumAge: 60000 }
+      );
+
+      // 2. High-precision continuous satellite tracking
       watchId = navigator.geolocation.watchPosition(
-        (pos) => {
-          const lat = pos.coords.latitude;
-          const lng = pos.coords.longitude;
-          const speed = Math.round((pos.coords.speed || 0) * 3.6);
-          const acc = Math.round(pos.coords.accuracy);
-
-          document.getElementById('disp-lat').innerText = lat.toFixed(6);
-          document.getElementById('disp-lng').innerText = lng.toFixed(6);
-          document.getElementById('disp-speed').innerText = `${speed} km/h`;
-          document.getElementById('disp-acc').innerText = `± ${acc} m`;
-
-          // Stream coordinates to server and Firebase
-          sendLocationPayload({
-            lat,
-            lng,
-            speed,
-            accuracy: acc,
-            battery: currentBattery
-          });
-        },
+        onPositionSuccess,
         (err) => {
-          console.error('GPS Error:', err);
-          alert(`GPS Permission or Signal Error: ${err.message}. Please enable location permissions.`);
-          stopTracking();
+          console.warn('GPS watch warning:', err.code, err.message);
+          if (err.code === 1) {
+            alert('Location Permission Denied. Please enable Location access in phone browser settings.');
+            stopTracking();
+          } else if (err.code === 3) {
+            badge.innerText = '📡 Searching GPS Satellites...';
+          }
         },
         {
           enableHighAccuracy: true,
-          maximumAge: 1000,
-          timeout: 10000
+          maximumAge: 15000,
+          timeout: 25000
         }
       );
     }

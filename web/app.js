@@ -1140,7 +1140,7 @@ function applyLocationUpdate(data) {
     if (state.trackedChildId === child.id) {
       if (trackingMarker && trackingMap) {
         trackingMarker.setLatLng([child.lat, child.lng]);
-        trackingMap.panTo([child.lat, child.lng]);
+        trackingMap.setView([child.lat, child.lng], Math.max(trackingMap.getZoom(), 15));
       }
       updateChildQuickSheet();
       updateTelemetryPanel();
@@ -1194,20 +1194,41 @@ function initLiveStreamSSE() {
     };
   }
 
-  // Direct Firebase RTDB sync fallback (makes Cloudflare deployment 100% serverless)
+  // Direct Firebase RTDB sync (makes Cloudflare deployment 100% serverless)
   setInterval(async () => {
     try {
+      // 1. Sync live coordinates
       const res = await fetch('https://surakshya-india-default-rtdb.asia-southeast1.firebasedatabase.app/locations.json');
-      if (!res.ok) return;
-      const data = await res.json();
-      if (!data) return;
-      Object.keys(data).forEach(id => {
-        applyLocationUpdate(data[id]);
-      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data) {
+          Object.keys(data).forEach(id => {
+            applyLocationUpdate(data[id]);
+          });
+        }
+      }
+
+      // 2. Sync emergency alerts
+      const alertRes = await fetch('https://surakshya-india-default-rtdb.asia-southeast1.firebasedatabase.app/alerts.json');
+      if (alertRes.ok) {
+        const alerts = await alertRes.json();
+        if (alerts) {
+          const keys = Object.keys(alerts);
+          const latestKey = keys[keys.length - 1];
+          const latestAlert = alerts[latestKey];
+          if (latestAlert && (Date.now() - (latestAlert.timestamp || 0) < 20000)) {
+            if (!window.lastAlertSeen || window.lastAlertSeen !== latestAlert.timestamp) {
+              window.lastAlertSeen = latestAlert.timestamp;
+              triggerEmergencyAlert('real_phone');
+              logEvent(`🚨 CRITICAL 112 SOS from ${latestAlert.childName}!`);
+            }
+          }
+        }
+      }
     } catch (e) {
       // silent network fallback
     }
-  }, 2500);
+  }, 2000);
 }
 
 function openPairPhoneModal() {

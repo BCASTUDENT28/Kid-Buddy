@@ -88,6 +88,27 @@ function sendTwilioSMS(to, body) {
   req.end();
 }
 
+// Automatically dispatch SMS whenever an alert appears in Firebase Realtime Database
+if (firebaseDb) {
+  firebaseDb.ref('alerts').limitToLast(1).on('child_added', snapshot => {
+    const alertData = snapshot.val();
+    if (!alertData) return;
+    if (Date.now() - (alertData.timestamp || 0) < 120000) {
+      console.log('[Firebase Alert Sync]:', alertData.childName, alertData.emergencyType);
+      if (twilioConfig && Array.isArray(twilioConfig.parentNumbers)) {
+        const childName = alertData.childName || 'Child';
+        const lat = alertData.lat ? Number(alertData.lat).toFixed(4) : 'N/A';
+        const lng = alertData.lng ? Number(alertData.lng).toFixed(4) : 'N/A';
+        const smsText = `🚨 [KID BUDDY SOS ALERT] ${childName} ne Emergency Trigger kiya hai! Live GPS: https://surakshya321.bcastudent321.workers.dev/ (Lat: ${lat}, Lng: ${lng}, Battery: ${alertData.battery || 85}%). Please check immediately!`;
+        twilioConfig.parentNumbers.forEach(num => {
+          sendTwilioSMS(num, smsText);
+        });
+      }
+      broadcastSSE('emergency_sos', alertData);
+    }
+  });
+}
+
 // ==========================================================================
 // In-Memory Real-Time State & SSE Clients (Server-Sent Events)
 // ==========================================================================
