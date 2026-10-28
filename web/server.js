@@ -88,20 +88,51 @@ function sendTwilioSMS(to, body) {
   req.end();
 }
 
-// Automatically dispatch SMS whenever an alert appears in Firebase Realtime Database
+function makeTwilioCall(to, childName) {
+  if (!twilioConfig) return;
+  const twiml = `<Response><Say voice="alice">Emergency alert from Kid Buddy Bharat! ${childName} has triggered an emergency 112 SOS panic alert. Please check your parent dashboard immediately.</Say></Response>`;
+  const postData = querystring.stringify({
+    From: twilioConfig.fromNumber,
+    To: to,
+    Twiml: twiml
+  });
+
+  const req = https.request({
+    hostname: 'api.twilio.com',
+    path: `/2010-04-01/Accounts/${twilioConfig.accountSid}/Calls.json`,
+    method: 'POST',
+    headers: {
+      'Authorization': 'Basic ' + Buffer.from(`${twilioConfig.accountSid}:${twilioConfig.authToken}`).toString('base64'),
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'Content-Length': Buffer.byteLength(postData)
+    }
+  }, res => {
+    let d = '';
+    res.on('data', c => d += c);
+    res.on('end', () => {
+      console.log(`[Twilio Call Initiated] To: ${to}, Status: ${res.statusCode}`);
+    });
+  });
+  req.on('error', err => console.error('[Twilio Call Error]:', err.message));
+  req.write(postData);
+  req.end();
+}
+
+// Automatically dispatch Emergency Phone Calls & SMS whenever an alert appears in Firebase Realtime Database
 if (firebaseDb) {
   firebaseDb.ref('alerts').limitToLast(1).on('child_added', snapshot => {
     const alertData = snapshot.val();
     if (!alertData) return;
-    if (Date.now() - (alertData.timestamp || 0) < 120000) {
+    if (Date.now() - (alertData.timestamp || 0) < 300000) {
       console.log('[Firebase Alert Sync]:', alertData.childName, alertData.emergencyType);
       if (twilioConfig && Array.isArray(twilioConfig.parentNumbers)) {
         const childName = alertData.childName || 'Child';
         const lat = alertData.lat ? Number(alertData.lat).toFixed(4) : 'N/A';
         const lng = alertData.lng ? Number(alertData.lng).toFixed(4) : 'N/A';
-        const smsText = `🚨 [KID BUDDY SOS ALERT] ${childName} ne Emergency Trigger kiya hai! Live GPS: https://surakshya321.bcastudent321.workers.dev/ (Lat: ${lat}, Lng: ${lng}, Battery: ${alertData.battery || 85}%). Please check immediately!`;
+        const smsText = `EMERGENCY ALERT: Kid Buddy child alert! ${childName} has triggered 112 SOS panic alert at Lat ${lat}, Lng ${lng}. Battery: ${alertData.battery || 85}%. Check Kid Buddy dashboard immediately.`;
         twilioConfig.parentNumbers.forEach(num => {
-          sendTwilioSMS(num, smsText);
+          makeTwilioCall(num, childName); // Instant Voice Call
+          sendTwilioSMS(num, smsText);     // SMS Alert
         });
       }
       broadcastSSE('emergency_sos', alertData);

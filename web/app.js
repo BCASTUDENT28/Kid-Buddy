@@ -929,36 +929,125 @@ function callChildline1098() {
   alert('Connecting to 1098 Childline India Foundation 24/7 Helpline... 🧒');
 }
 
-// Emergency SOS with 112 ERSS
-function triggerEmergencyAlert(source) {
-  const child = getActiveChild();
-  const modal = document.getElementById('emergency-modal');
-  const audio = document.getElementById('audio-sos');
+// Web Audio API Synthesized Loud 112 Siren (Works 100% in all browsers without external WAV file)
+let sirenContext = null;
+let sirenOsc = null;
+let sirenInterval = null;
+let isTestingSiren = false;
 
-  document.getElementById('emergency-child-name').innerText = child.name;
+function unlockAudio() {
+  try {
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+    if (!sirenContext) sirenContext = new AudioCtx();
+    if (sirenContext.state === 'suspended') {
+      sirenContext.resume();
+    }
+  } catch (e) {}
+}
+
+['click', 'keydown', 'touchstart', 'mousedown'].forEach(evt => {
+  window.addEventListener(evt, unlockAudio, { passive: true });
+});
+
+function playSyntheticSiren() {
+  try {
+    unlockAudio();
+    const AudioCtx = window.AudioContext || window.webkitAudioContext;
+    if (!AudioCtx) return;
+    if (!sirenContext) sirenContext = new AudioCtx();
+    if (sirenContext.state === 'suspended') {
+      sirenContext.resume();
+    }
+
+    if (sirenOsc) return;
+    sirenOsc = sirenContext.createOscillator();
+    const gain = sirenContext.createGain();
+    sirenOsc.type = 'sawtooth';
+    gain.gain.setValueAtTime(0.4, sirenContext.currentTime);
+
+    sirenOsc.connect(gain);
+    gain.connect(sirenContext.destination);
+    sirenOsc.start();
+
+    let high = true;
+    sirenInterval = setInterval(() => {
+      if (sirenOsc && sirenContext) {
+        sirenOsc.frequency.setValueAtTime(high ? 980 : 760, sirenContext.currentTime);
+        high = !high;
+      }
+    }, 280);
+  } catch (e) {
+    console.warn('Siren audio note:', e);
+  }
+}
+
+function stopSyntheticSiren() {
+  if (sirenInterval) {
+    clearInterval(sirenInterval);
+    sirenInterval = null;
+  }
+  if (sirenOsc) {
+    try { sirenOsc.stop(); } catch(e){}
+    sirenOsc = null;
+  }
+}
+
+function toggleTestSiren() {
+  unlockAudio();
+  const btn = document.getElementById('btn-test-siren');
+  if (!isTestingSiren) {
+    playSyntheticSiren();
+    isTestingSiren = true;
+    if (btn) btn.innerHTML = '⏹️ Stop Siren';
+    logEvent('🔊 Testing 112 Siren speaker output on laptop.');
+  } else {
+    stopSyntheticSiren();
+    isTestingSiren = false;
+    if (btn) btn.innerHTML = '🔊 Test Siren';
+  }
+}
+
+// Emergency SOS with 112 ERSS
+function triggerEmergencyAlert(source, alertData) {
+  const child = (alertData && state.children.find(c => c.id === alertData.childId)) || getActiveChild();
+  const modal = document.getElementById('emergency-modal');
+
+  const childName = (alertData && alertData.childName) || child.name;
+  const lat = (alertData && alertData.lat) || child.lat;
+  const lng = (alertData && alertData.lng) || child.lng;
+
+  document.getElementById('emergency-child-name').innerText = childName;
   document.getElementById('emergency-child-avatar').src = child.avatar;
-  document.getElementById('emergency-coords').innerText = `${child.lat.toFixed(6)}, ${child.lng.toFixed(6)}`;
-  document.getElementById('emergency-address').innerText = child.locationName;
+  document.getElementById('emergency-coords').innerText = `${Number(lat).toFixed(6)}, ${Number(lng).toFixed(6)}`;
+  document.getElementById('emergency-address').innerText = (alertData && alertData.address) || `Live Coordinates: ${Number(lat).toFixed(4)}, ${Number(lng).toFixed(4)}`;
 
   const now = new Date();
   document.getElementById('emergency-time').innerText = now.toLocaleTimeString();
 
   modal.classList.add('active');
 
-  if (audio) {
-    audio.currentTime = 0;
-    audio.play().catch(e => console.log('Audio autoplay prevented by browser policy:', e));
+  // Center map on child in distress
+  if (lat && lng && state.map) {
+    state.map.setView([Number(lat), Number(lng)], 16);
   }
 
-  showPushNotification('🚨 112 CRITICAL SOS ALERT', `${child.name.toUpperCase()} has triggered emergency panic in Bengaluru!`);
-  logEvent(`[CRITICAL 112 SOS] Emergency triggered by ${child.name} at (${child.lat.toFixed(4)}, ${child.lng.toFixed(4)}). Dispatching to 112 ERSS.`);
+  // Play synthesized 112 Emergency Siren
+  playSyntheticSiren();
+
+  showPushNotification('🚨 112 CRITICAL SOS ALERT', `${childName.toUpperCase()} has triggered emergency panic!`);
+  logEvent(`[CRITICAL 112 SOS] Emergency triggered by ${childName} at (${Number(lat).toFixed(4)}, ${Number(lng).toFixed(4)}). Dispatching to 112 ERSS.`);
 }
 
 function dismissEmergencyAlert() {
   const modal = document.getElementById('emergency-modal');
-  const audio = document.getElementById('audio-sos');
   modal.classList.remove('active');
-  if (audio) audio.pause();
+  stopSyntheticSiren();
+  if (isTestingSiren) {
+    isTestingSiren = false;
+    const btn = document.getElementById('btn-test-siren');
+    if (btn) btn.innerHTML = '🔊 Test Siren';
+  }
   logEvent('Emergency alert acknowledged by guardian (सुरक्षित हैं).');
 }
 
@@ -1195,6 +1284,9 @@ function initLiveStreamSSE() {
   }
 
   // Direct Firebase RTDB sync (makes Cloudflare deployment 100% serverless)
+  let lastProcessedAlertKey = null;
+  let isInitialAlertCheck = true;
+
   setInterval(async () => {
     try {
       // 1. Sync live coordinates
@@ -1212,15 +1304,24 @@ function initLiveStreamSSE() {
       const alertRes = await fetch('https://surakshya-india-default-rtdb.asia-southeast1.firebasedatabase.app/alerts.json');
       if (alertRes.ok) {
         const alerts = await alertRes.json();
-        if (alerts) {
+        if (alerts && typeof alerts === 'object') {
           const keys = Object.keys(alerts);
-          const latestKey = keys[keys.length - 1];
-          const latestAlert = alerts[latestKey];
-          if (latestAlert && (Date.now() - (latestAlert.timestamp || 0) < 20000)) {
-            if (!window.lastAlertSeen || window.lastAlertSeen !== latestAlert.timestamp) {
-              window.lastAlertSeen = latestAlert.timestamp;
-              triggerEmergencyAlert('real_phone');
-              logEvent(`🚨 CRITICAL 112 SOS from ${latestAlert.childName}!`);
+          if (keys.length > 0) {
+            const latestKey = keys[keys.length - 1];
+            const latestAlert = alerts[latestKey];
+
+            if (isInitialAlertCheck) {
+              lastProcessedAlertKey = latestKey;
+              isInitialAlertCheck = false;
+              // If alert happened in the last 45 seconds on page load
+              if (latestAlert && (Date.now() - (latestAlert.timestamp || 0) < 45000)) {
+                triggerEmergencyAlert('real_phone', latestAlert);
+                logEvent(`🚨 Active 112 SOS detected for ${latestAlert.childName || 'Child'}!`);
+              }
+            } else if (latestKey !== lastProcessedAlertKey) {
+              lastProcessedAlertKey = latestKey;
+              triggerEmergencyAlert('real_phone', latestAlert);
+              logEvent(`🚨 CRITICAL 112 SOS received from phone for ${latestAlert.childName || 'Child'}!`);
             }
           }
         }
