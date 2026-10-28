@@ -1,0 +1,803 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Kid Buddy India (बाल रक्षक) — Live GPS Child Safety & School Bus Tracker</title>
+  <meta name="description" content="Kid Buddy India is a real-time child location tracker, school bus monitor, geofencing, and emergency safety app built for Indian parents and schools.">
+  
+  <!-- Google Fonts -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=Rozha+One&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+  
+  <!-- Leaflet Map CSS & JS -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" integrity="sha256-p4NxAoJBhIIN+hmNHrzRCf9tD/miZyoHS5obTRR9BMY=" crossorigin="" />
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" integrity="sha256-20nQCchB9co0qIjJZRGuk2/Z9VM+kNiyxNV1lvTlZBo=" crossorigin=""></script>
+  
+  <link rel="stylesheet" href="style.css">
+</head>
+<body class="theme-dark">
+  <!-- Top Global Command Header -->
+  <header class="app-header" id="app-header">
+    <div class="header-left">
+      <div class="brand">
+        <div class="brand-logo-container">
+          <img src="/api/icon" alt="Kid Buddy India Logo" class="brand-icon" onerror="this.src='/api/person-icon';">
+          <span class="flag-badge">🇮🇳</span>
+        </div>
+        <div class="brand-text">
+          <div class="brand-title">
+            <span class="brand-name">Kid Buddy</span>
+            <span class="hindi-brand">बाल रक्षक</span>
+            <span class="badge-bharat">Bharat Edition</span>
+          </div>
+          <div class="brand-subtitle">GPS Child Safety • School Bus Live Track • 112 ERSS & 1098 Childline</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="header-center">
+      <div class="mode-pills" id="mode-pills">
+        <button class="pill-btn active" id="btn-mode-parent" onclick="switchAppRole('parent')">
+          <span class="pill-icon">👨‍👩‍👧</span> <span data-i18n="parent_mode">Parent Mode</span>
+        </button>
+        <button class="pill-btn" id="btn-mode-child" onclick="switchAppRole('child')">
+          <span class="pill-icon">🧒</span> <span data-i18n="child_mode">Baccha (Child) Mode</span>
+        </button>
+        <button class="pill-btn" id="btn-mode-bus" onclick="switchTab('bus')">
+          <span class="pill-icon">🚌</span> <span data-i18n="bus_mode">School Bus Track</span>
+        </button>
+        <button class="pill-btn" id="btn-mode-code" onclick="toggleCodeInspector()">
+          <span class="pill-icon">⚡</span> Swift Code
+        </button>
+      </div>
+    </div>
+
+    <div class="header-right">
+      <!-- City Quick Switcher -->
+      <div class="city-selector">
+        <span class="city-label">📍 City:</span>
+        <select id="city-dropdown" onchange="switchCity(this.value)">
+          <option value="bengaluru" selected>Bengaluru (Indiranagar)</option>
+          <option value="delhi">Delhi NCR (Connaught Place)</option>
+          <option value="mumbai">Mumbai (Bandra West)</option>
+        </select>
+      </div>
+
+      <!-- Language Switcher -->
+      <div class="lang-switch-wrap">
+        <button class="lang-toggle-btn" id="btn-lang-toggle" onclick="toggleLanguage()">
+          🌐 <span id="current-lang-text">English / हिंदी</span>
+        </button>
+      </div>
+
+      <div class="view-toggles">
+        <button class="view-btn active" id="btn-view-phone" onclick="setViewMode('phone')" title="iPhone Simulator Frame">
+          📱 iPhone
+        </button>
+        <button class="view-btn" id="btn-view-desktop" onclick="setViewMode('desktop')" title="Expanded Fullscreen Command Center">
+          🖥️ Fullscreen
+        </button>
+      </div>
+
+      <button class="sos-global-btn" id="btn-global-sos" onclick="triggerEmergencyAlert('manual')">
+        <span class="sos-pulse"></span>
+        🚨 112 SOS
+      </button>
+    </div>
+  </header>
+
+  <!-- Notification Banner (Toast) -->
+  <div class="ios-push-notification" id="ios-push-notification">
+    <div class="push-card">
+      <img src="/api/icon" class="push-app-icon" alt="App">
+      <div class="push-content">
+        <div class="push-header">
+          <span class="push-app-name">KID BUDDY BHARAT</span>
+          <span class="push-time" id="push-time">Just Now</span>
+        </div>
+        <div class="push-title" id="push-title">Geofence Alert (स्कूल आगमन)</div>
+        <div class="push-body" id="push-body">Arpit Kaur has reached National Public School (NPS) Indiranagar safely.</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Audio Element for SOS alert -->
+  <audio id="audio-sos" preload="auto">
+    <source src="/api/sound/sos" type="audio/wav">
+  </audio>
+
+  <!-- Main Container -->
+  <main class="main-container" id="main-container">
+
+    <!-- Simulator Frame Area -->
+    <div class="simulator-wrapper" id="simulator-wrapper">
+      <div class="device-frame" id="device-frame">
+        <!-- Hardware Buttons -->
+        <div class="hw-btn hw-silent"></div>
+        <div class="hw-btn hw-vol-up"></div>
+        <div class="hw-btn hw-vol-down"></div>
+        <div class="hw-btn hw-power"></div>
+
+        <!-- Phone Bezel & Screen -->
+        <div class="screen-container">
+          <!-- Dynamic Island / Notch -->
+          <div class="dynamic-island" id="dynamic-island" onclick="expandDynamicIsland()">
+            <div class="island-camera"></div>
+            <div class="island-content">
+              <span class="island-icon" id="island-icon">🚌</span>
+              <span class="island-text" id="island-text">NPS Bus #14B • 1.2 km away</span>
+            </div>
+          </div>
+
+          <!-- iOS Status Bar (Indian Carriers Jio 5G / Airtel 5G) -->
+          <div class="ios-status-bar">
+            <div class="status-time" id="status-clock">10:55</div>
+            <div class="status-icons">
+              <span class="status-carrier" id="status-carrier">Jio True 5G</span>
+              <span class="status-wifi">􀙇</span>
+              <div class="status-battery">
+                <div class="battery-level" style="width: 90%;"></div>
+              </div>
+            </div>
+          </div>
+
+          <!-- iOS Screen Views Container -->
+          <div class="ios-app-viewport" id="ios-app-viewport">
+
+            <!-- ===================== VIEW 1: PARENT TRACKING ===================== -->
+            <div class="app-screen active" id="screen-tracking">
+              <!-- Screen Navigation Bar -->
+              <div class="ios-nav-bar">
+                <div class="nav-brand">
+                  <img src="/api/icon" class="nav-logo" alt="Logo">
+                  <div class="nav-title-group">
+                    <span class="nav-title" data-i18n="app_title">Kid Buddy Bharat</span>
+                    <span class="nav-status-dot online"></span>
+                    <span class="nav-subtitle" id="nav-location-tag">Indiranagar, Bengaluru</span>
+                  </div>
+                </div>
+                <div class="nav-actions">
+                  <button class="nav-icon-btn" id="btn-toggle-map-type" onclick="toggleMapType()" title="Switch Standard / Satellite">
+                    🗺️
+                  </button>
+                  <button class="nav-icon-btn" id="btn-add-child-modal" onclick="openAddChildModal()" title="Add Child Device">
+                    ➕
+                  </button>
+                </div>
+              </div>
+
+              <!-- Map Container -->
+              <div class="map-view-wrapper">
+                <div id="tracking-map" class="interactive-map"></div>
+                
+                <!-- Floating Map Controls -->
+                <div class="map-floating-overlay top-controls">
+                  <div class="map-type-badge" id="map-type-label">Standard Map</div>
+                  <button class="locate-me-btn" onclick="centerOnTrackedChild()" title="Recenter on Child">
+                    🎯 Locate Baccha
+                  </button>
+                </div>
+
+                <!-- Live Walk Simulation HUD -->
+                <div class="sim-hud" id="sim-hud">
+                  <span class="hud-pulse"></span>
+                  <span id="hud-text">Simulating School Bus Route (28 km/h)</span>
+                  <button class="hud-stop-btn" onclick="toggleMovementSimulation()">Pause</button>
+                </div>
+              </div>
+
+              <!-- Selected Child Info Sheet -->
+              <div class="child-quick-sheet" id="child-quick-sheet">
+                <div class="sheet-drag-handle"></div>
+                <div class="sheet-child-header">
+                  <div class="sheet-avatar-wrapper">
+                    <img src="" id="sheet-avatar" class="sheet-avatar" alt="Avatar">
+                    <span class="sheet-status-badge online" id="sheet-status-badge"></span>
+                  </div>
+                  <div class="sheet-child-meta">
+                    <div class="sheet-child-name" id="sheet-child-name">Arpit Kaur</div>
+                    <div class="sheet-child-loc" id="sheet-child-loc">📍 Near National Public School (NPS) Indiranagar</div>
+                    <div class="sheet-stats-row">
+                      <span class="meta-tag" id="sheet-battery">🔋 88% Battery</span>
+                      <span class="meta-tag" id="sheet-speed">🚶 4.2 km/h</span>
+                      <span class="meta-tag tiranga-pill" id="sheet-status-tag">🛡️ Surakshit (Safe)</span>
+                    </div>
+                  </div>
+                  <div class="sheet-actions">
+                    <button class="action-circle-btn chat" onclick="switchTab('chat')" title="Message Baccha">💬</button>
+                    <button class="action-circle-btn alert" onclick="triggerEmergencyAlert('sim')" title="Trigger Panic">🚨</button>
+                  </div>
+                </div>
+
+                <!-- Children Horizontal Carousel (MKCollectionView counterpart) -->
+                <div class="carousel-label">BACHON KI LIST (TRACKED CHILDREN - 3)</div>
+                <div class="children-carousel" id="children-carousel">
+                  <!-- Populated by JS -->
+                </div>
+              </div>
+            </div>
+
+            <!-- ===================== VIEW 2: SCHOOL BUS & VAN LIVE TRACKER ===================== -->
+            <div class="app-screen" id="screen-bus">
+              <div class="ios-nav-bar">
+                <div class="nav-title-group">
+                  <span class="nav-title">School Bus & Van Live</span>
+                  <span class="nav-subtitle">NPS Route #14B (KA-01-F-4589)</span>
+                </div>
+                <button class="nav-icon-btn text-btn" onclick="callDriverSimulator()">📞 Call Driver</button>
+              </div>
+
+              <div class="screen-scrollable">
+                <div class="bus-driver-card">
+                  <div class="driver-header">
+                    <div class="driver-avatar-wrap">
+                      <span class="driver-badge-icon">👨‍✈️</span>
+                    </div>
+                    <div class="driver-details">
+                      <div class="driver-name">Ramesh Bhaiya (Driver)</div>
+                      <div class="driver-bus-num">Bus: <strong>KA-01-F-4589</strong> • GPS Speed: <strong>26 km/h</strong></div>
+                      <div class="bus-attendant">Attendant Didi: Sunita Bai (+91 98451 22334)</div>
+                    </div>
+                  </div>
+                  <div class="bus-speed-monitor safe">
+                    <span class="speed-check-icon">✅</span>
+                    <span>Speed Compliant: Under 40 km/h RTO School Zone Limit</span>
+                  </div>
+                </div>
+
+                <!-- Live Route Stops Timeline -->
+                <div class="section-title-bar">
+                  <span>BUS STOP SCHEDULE & ETA</span>
+                  <span class="badge-count">Next: 6 Mins</span>
+                </div>
+
+                <div class="bus-stops-list" id="bus-stops-list">
+                  <!-- Populated by JS -->
+                </div>
+
+                <div class="bus-action-row">
+                  <button class="btn-action primary" onclick="toggleMovementSimulation()" style="width: 100%;">
+                    🚌 Simulate Bus Movement Along Route
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            <!-- ===================== VIEW 3: OBSERVED PLACES / GEOFENCING ===================== -->
+            <div class="app-screen" id="screen-places">
+              <div class="ios-nav-bar">
+                <div class="nav-title-group">
+                  <span class="nav-title" data-i18n="safe_zones_title">Safe Zones (सुरक्षित क्षेत्र)</span>
+                  <span class="nav-subtitle">Geofencing & Alerts</span>
+                </div>
+                <button class="nav-icon-btn" onclick="openAddPlaceModal()" title="Add Safe Zone">➕</button>
+              </div>
+
+              <div class="screen-scrollable">
+                <div class="geofence-map-mini" id="places-map"></div>
+
+                <div class="section-title-bar">
+                  <span data-i18n="active_zones_label">ACTIVE GEOFENCED ZONES</span>
+                  <span class="badge-count" id="places-count">4 Places</span>
+                </div>
+
+                <div class="places-list" id="places-list">
+                  <!-- Populated by JS -->
+                </div>
+
+                <div class="geofence-alert-box">
+                  <div class="alert-box-icon">🔔</div>
+                  <div class="alert-box-text">
+                    <strong data-i18n="auto_alerts_title">Smart SMS & WhatsApp Notifications</strong>
+                    <p data-i18n="auto_alerts_desc">Mummy & Papa will receive immediate alerts whenever Arpit Kaur enters or leaves school, tuition, or home.</p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- ===================== VIEW 4: MOVEMENT HISTORY ===================== -->
+            <div class="app-screen" id="screen-history">
+              <div class="ios-nav-bar">
+                <div class="nav-title-group">
+                  <span class="nav-title" id="history-screen-title">Arpit Kaur's History</span>
+                  <span class="nav-subtitle" data-i18n="today_route">Aaj Ka Route (Today's Route)</span>
+                </div>
+                <button class="nav-icon-btn text-btn" onclick="clearHistoryPoints()">Clear</button>
+              </div>
+
+              <div class="screen-scrollable history-screen-content">
+                <div class="history-map-wrapper">
+                  <div id="history-map" class="interactive-map mini"></div>
+                  <!-- History Replay Bar -->
+                  <div class="history-player-bar">
+                    <button class="replay-btn" id="btn-replay" onclick="toggleRouteReplay()">▶ Play Route</button>
+                    <div class="replay-slider-wrap">
+                      <input type="range" id="replay-slider" min="0" max="100" value="100" oninput="onReplayScrub(this.value)">
+                    </div>
+                    <span class="replay-speed-tag" id="replay-speed-tag">1x</span>
+                  </div>
+                </div>
+
+                <div class="section-title-bar">
+                  <span data-i18n="timeline_label">LOCATION TIMELINE (AAJ KA DIN)</span>
+                  <span class="badge-count" id="history-count">6 Waypoints</span>
+                </div>
+
+                <div class="timeline-list" id="timeline-list">
+                  <!-- Populated by JS -->
+                </div>
+              </div>
+            </div>
+
+            <!-- ===================== VIEW 5: IN-APP CHAT ===================== -->
+            <div class="app-screen" id="screen-chat">
+              <div class="ios-nav-bar chat-nav">
+                <div class="chat-recipient">
+                  <img src="" id="chat-nav-avatar" class="chat-nav-avatar" alt="Child">
+                  <div>
+                    <div class="chat-nav-name" id="chat-nav-name">Arpit Kaur</div>
+                    <div class="chat-nav-status">Online • 📍 Indiranagar</div>
+                  </div>
+                </div>
+                <button class="nav-icon-btn" onclick="callChildSimulator()" title="Voice Call">📞</button>
+              </div>
+
+              <div class="chat-messages-container" id="chat-messages-container">
+                <!-- Messages populated by JS -->
+              </div>
+
+              <!-- Quick reply chips (Desi / Indian Family context) -->
+              <div class="quick-chips">
+                <button class="chip" onclick="sendQuickMessage('School bus me baith gayi beta?')">Bus me baith gayi?</button>
+                <button class="chip" onclick="sendQuickMessage('Tuition khatam ho gaya?')">Tuition done?</button>
+                <button class="chip" onclick="sendQuickMessage('Lunch dhang se khaya?')">Lunch khaya?</button>
+                <button class="chip" onclick="sendQuickMessage('Ramesh Bhaiya pahunch gaye kya?')">Driver aa gaya?</button>
+                <button class="chip" onclick="sendQuickMessage('Shabash beta! See you at home ❤️')">See you ❤️</button>
+              </div>
+
+              <!-- Chat Input Bar -->
+              <div class="ios-chat-input-bar">
+                <button class="chat-attach-btn" onclick="simulateSendPhoto()" title="Attach Photo">📷</button>
+                <input type="text" id="chat-input" placeholder="Arpit Kaur ko message bhejo..." onkeydown="if(event.key==='Enter') sendChatMessage()">
+                <button class="chat-send-btn" id="btn-chat-send" onclick="sendChatMessage()">
+                  ➤
+                </button>
+              </div>
+            </div>
+
+            <!-- ===================== VIEW 6: SAFETY & SETTINGS ===================== -->
+            <div class="app-screen" id="screen-profile">
+              <div class="ios-nav-bar">
+                <div class="nav-title-group">
+                  <span class="nav-title">Suraksha & Parivaar</span>
+                  <span class="nav-subtitle">Indian Emergency & Guardian Settings</span>
+                </div>
+              </div>
+
+              <div class="screen-scrollable">
+                <div class="profile-card">
+                  <div class="profile-avatar-wrap">
+                    <img src="/api/person-icon" class="profile-avatar" alt="Parent">
+                  </div>
+                  <div class="profile-name">Rajesh & Priya Sharma</div>
+                  <div class="profile-email">+91 98765 43210 • Bengaluru</div>
+                  <div class="profile-badge">Primary Guardian Account (माता-पिता)</div>
+                </div>
+
+                <!-- Emergency SOS Helplines -->
+                <div class="settings-group">
+                  <div class="settings-group-title">INDIA NATIONAL EMERGENCY HELPLINES</div>
+                  <div class="settings-item highlight-emergency" onclick="callNational112()">
+                    <div class="item-left">
+                      <span class="item-icon">🚨</span>
+                      <span><strong>Dial 112</strong> — National Emergency Response (ERSS)</span>
+                    </div>
+                    <span class="item-val">Direct Call</span>
+                  </div>
+                  <div class="settings-item highlight-childline" onclick="callChildline1098()">
+                    <div class="item-left">
+                      <span class="item-icon">🧒</span>
+                      <span><strong>Dial 1098</strong> — Childline India (24/7 Child Helpline)</span>
+                    </div>
+                    <span class="item-val">Emergency</span>
+                  </div>
+                  <div class="settings-item" onclick="triggerEmergencyAlert('test')">
+                    <div class="item-left">
+                      <span class="item-icon">🔊</span>
+                      <span style="color: var(--danger-color); font-weight: 600;">Test Emergency Siren Sound (WAV)</span>
+                    </div>
+                    <span class="item-arrow">Play ▶</span>
+                  </div>
+                </div>
+
+                <div class="settings-group">
+                  <div class="settings-group-title">DEVICE PAIRING & SECURITY (OTP)</div>
+                  <div class="settings-item" onclick="openAddChildModal()">
+                    <div class="item-left">
+                      <span class="item-icon">🔗</span>
+                      <span>Pair Child Smartwatch / Smartphone</span>
+                    </div>
+                    <span class="item-arrow">›</span>
+                  </div>
+                  <div class="settings-item" onclick="showPairingOTP()">
+                    <div class="item-left">
+                      <span class="item-icon">🔑</span>
+                      <span>Baccha Verification OTP Code</span>
+                    </div>
+                    <span class="item-val" id="current-otp">541 290</span>
+                  </div>
+                </div>
+
+                <div class="settings-group">
+                  <div class="settings-group-title">KID BUDDY BHARAT TECH STACK</div>
+                  <div class="settings-item" onclick="toggleCodeInspector()">
+                    <div class="item-left">
+                      <span class="item-icon">📦</span>
+                      <span>Swift iOS Architecture & GeoFire</span>
+                    </div>
+                    <span class="item-val">Inspect ↗</span>
+                  </div>
+                  <div class="settings-item">
+                    <div class="item-left">
+                      <span class="item-icon">☁️</span>
+                      <span>Firebase Realtime Database (Mumbai Region)</span>
+                    </div>
+                    <span class="item-val">Connected</span>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            <!-- ===================== VIEW 7: CHILD DEVICE VIEW (ALTERNATIVE ROLE) ===================== -->
+            <div class="app-screen" id="screen-child-device">
+              <div class="child-device-viewport">
+                <div class="child-top-status">
+                  <div class="child-status-badge">🟢 Mummy-Papa Can See Your Location</div>
+                  <div class="child-battery-disp">🔋 88% • Jio 5G • GPS Suraksha Active</div>
+                </div>
+
+                <div class="child-hero">
+                  <div class="child-hero-avatar-ring">
+                    <img src="" id="child-view-avatar" class="child-hero-avatar" alt="Child">
+                  </div>
+                  <h2 class="child-hero-greeting" id="child-hero-greeting">Hi Arpit Kaur! Beta</h2>
+                  <p class="child-hero-sub">You are safe. Mom & Dad are connected.</p>
+                </div>
+
+                <!-- Big Indian SOS Button -->
+                <div class="child-sos-container">
+                  <button class="child-big-sos-btn" onclick="triggerEmergencyAlert('child')">
+                    <span class="sos-ring"></span>
+                    <span class="sos-ring delay"></span>
+                    <span class="sos-btn-text">SOS</span>
+                    <span class="sos-btn-sub">HOLD 2 SEC • DIAL 112</span>
+                  </button>
+                  <div class="sos-hint">Pressing SOS immediately dials 112 ERSS, sends WhatsApp GPS coords to Mummy & Papa, and triggers emergency alert.</div>
+                </div>
+
+                <!-- Child Quick Actions -->
+                <div class="child-quick-grid">
+                  <button class="child-grid-btn" onclick="childQuickCheckIn()">
+                    <span class="grid-icon">✅</span>
+                    <span class="grid-label">Main Theek Hoon (I'm Safe)</span>
+                  </button>
+                  <button class="child-grid-btn" onclick="switchAppRole('parent'); switchTab('chat');">
+                    <span class="grid-icon">💬</span>
+                    <span class="grid-label">Mummy ko Message</span>
+                  </button>
+                  <button class="child-grid-btn" onclick="triggerGeofenceArrival()">
+                    <span class="grid-icon">🏫</span>
+                    <span class="grid-label">School Pahunch Gayi</span>
+                  </button>
+                  <button class="child-grid-btn" onclick="callBusDriver()">
+                    <span class="grid-icon">🚌</span>
+                    <span class="grid-label">Bus Driver Bhaiya</span>
+                  </button>
+                </div>
+              </div>
+            </div>
+
+          </div>
+
+          <!-- Bottom iOS Tab Bar -->
+          <nav class="ios-tab-bar" id="ios-tab-bar">
+            <button class="tab-item active" id="tab-tracking" onclick="switchTab('tracking')">
+              <span class="tab-icon">📍</span>
+              <span class="tab-label" data-i18n="tab_tracking">Tracking</span>
+            </button>
+            <button class="tab-item" id="tab-bus" onclick="switchTab('bus')">
+              <span class="tab-icon">🚌</span>
+              <span class="tab-label" data-i18n="tab_bus">School Bus</span>
+            </button>
+            <button class="tab-item" id="tab-places" onclick="switchTab('places')">
+              <span class="tab-icon">🏠</span>
+              <span class="tab-label" data-i18n="tab_places">Places</span>
+            </button>
+            <button class="tab-item" id="tab-history" onclick="switchTab('history')">
+              <span class="tab-icon">🗺️</span>
+              <span class="tab-label" data-i18n="tab_history">History</span>
+            </button>
+            <button class="tab-item" id="tab-chat" onclick="switchTab('chat')">
+              <span class="tab-icon">💬</span>
+              <span class="tab-badge" id="chat-badge">1</span>
+              <span class="tab-label" data-i18n="tab_chat">Chat</span>
+            </button>
+            <button class="tab-item" id="tab-profile" onclick="switchTab('profile')">
+              <span class="tab-icon">🛡️</span>
+              <span class="tab-label" data-i18n="tab_safety">Suraksha</span>
+            </button>
+          </nav>
+
+          <!-- iOS Home Indicator -->
+          <div class="ios-home-indicator"></div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Side Control & Telemetry Panel -->
+    <aside class="side-control-panel" id="side-control-panel">
+      <!-- Bharat Safety & Live Telemetry Card -->
+      <div class="panel-card live-status-card">
+        <div class="card-header">
+          <div class="card-title">
+            <span class="live-indicator-dot"></span>
+            <span data-i18n="telemetry_header">Bharat GPS Telemetry & Controls</span>
+          </div>
+          <span class="badge-live">🇮🇳 LIVE</span>
+        </div>
+        <div class="control-grid">
+          <div class="control-box">
+            <label>Selected Child (बच्चा)</label>
+            <select id="telemetry-child-select" onchange="onChildSelectionChange(this.value)">
+              <!-- Options populated by JS -->
+            </select>
+          </div>
+          <div class="control-box">
+            <label>Bus / GPS Simulation</label>
+            <button class="btn-action primary" id="btn-toggle-sim" onclick="toggleMovementSimulation()">
+              ▶ Start Bus Route
+            </button>
+          </div>
+          <div class="control-box">
+            <label>School Arrival Alert</label>
+            <button class="btn-action secondary" onclick="simulateGeofenceEvent()">
+              🔔 Trigger School Arrival
+            </button>
+          </div>
+          <div class="control-box">
+            <label>National Emergency</label>
+            <button class="btn-action danger" onclick="triggerEmergencyAlert('panel')">
+              🚨 112 Emergency SOS
+            </button>
+          </div>
+        </div>
+      </div>
+
+      <!-- Live GPS Telemetry Box -->
+      <div class="panel-card telemetry-data-card">
+        <div class="card-header">
+          <div class="card-title">📍 Live GPS Coordinates (WGS84)</div>
+          <span class="coord-system">IST: <span id="current-ist-time">10:55 AM</span></span>
+        </div>
+        <div class="telemetry-stats">
+          <div class="stat-item">
+            <span class="stat-label">Latitude</span>
+            <span class="stat-val" id="tel-lat">12.975600</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Longitude</span>
+            <span class="stat-val" id="tel-lng">77.640200</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Speed / Limit</span>
+            <span class="stat-val" id="tel-speed">26 km/h (Safe)</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">GPS Precision</span>
+            <span class="stat-val" id="tel-acc">± 3.2 m (IRNSS/NavIC)</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Child Battery</span>
+            <span class="stat-val" id="tel-battery">88% (Jio 5G)</span>
+          </div>
+          <div class="stat-item">
+            <span class="stat-label">Location Landmark</span>
+            <span class="stat-val highlight" id="tel-place">NPS Indiranagar</span>
+          </div>
+        </div>
+      </div>
+
+      <!-- Real-Time Activity Log -->
+      <div class="panel-card activity-log-card">
+        <div class="card-header">
+          <div class="card-title">📋 Suraksha Event Stream</div>
+          <button class="btn-tiny" onclick="clearEventLog()">Clear</button>
+        </div>
+        <div class="activity-feed" id="activity-feed">
+          <!-- Populated by JS -->
+        </div>
+      </div>
+
+      <!-- Cloned Project Overview Card -->
+      <div class="panel-card repo-info-card">
+        <div class="card-header">
+          <div class="card-title">📁 Cloned Repository Info</div>
+          <span class="badge-swift">Swift 5.0 iOS</span>
+        </div>
+        <div class="repo-meta-list">
+          <div class="meta-row"><span>Repository:</span> <strong>gemygeni/Kid-Buddy</strong></div>
+          <div class="meta-row"><span>Bharat Edition:</span> <strong>Indian Emergency 112 & Bus Track</strong></div>
+          <div class="meta-row"><span>Navigation System:</span> <strong>GPS + NavIC / Leaflet Maps</strong></div>
+          <div class="meta-row"><span>Backend Stack:</span> <strong>Firebase RTDB & Push Notifications</strong></div>
+        </div>
+        <button class="btn-action outline" onclick="toggleCodeInspector()" style="margin-top: 12px; width: 100%;">
+          ⚡ Open Swift Source Code Inspector
+        </button>
+      </div>
+    </aside>
+
+  </main>
+
+  <!-- ===================== EMERGENCY SOS FULL-SCREEN MODAL (112 & 1098 INTEGRATION) ===================== -->
+  <div class="emergency-modal" id="emergency-modal">
+    <div class="emergency-backdrop"></div>
+    <div class="emergency-dialog">
+      <div class="siren-header">
+        <div class="siren-flasher">🚨</div>
+        <h2>112 NATIONAL EMERGENCY SOS!</h2>
+        <div class="siren-audio-pill">🔊 Playing criticalAlert.wav • Emergency Dispatch</div>
+      </div>
+
+      <div class="emergency-body">
+        <div class="distress-child-card">
+          <img src="" id="emergency-child-avatar" class="emergency-avatar" alt="Avatar">
+          <div>
+            <div class="distress-name" id="emergency-child-name">Arpit Kaur</div>
+            <div class="distress-time">Triggered: <span id="emergency-time">Just Now</span> • 📍 Bengaluru</div>
+          </div>
+        </div>
+
+        <div class="emergency-coords-box">
+          <div class="coord-line"><strong>GPS Coordinates:</strong> <span id="emergency-coords">12.975600, 77.640200</span></div>
+          <div class="coord-line"><strong>Live Landmark:</strong> <span id="emergency-address">Near NPS Indiranagar 100 Feet Rd, Bengaluru</span></div>
+          <div class="coord-line"><strong>Emergency Broadcast:</strong> <span>SMS & WhatsApp sent to Mummy (+91 98765 43210) & Papa</span></div>
+        </div>
+
+        <div class="emergency-actions">
+          <button class="btn-emergency-action call" onclick="alert('Calling Arpit Kaur (+91 98765 43211)...')">
+            📞 Call Baccha Immediately
+          </button>
+          <button class="btn-emergency-action police" onclick="alert('Connecting to 112 Emergency Response Support System (ERSS) with live coordinates 12.9756, 77.6402...')">
+            🚓 Connect 112 ERSS Police & Ambulance
+          </button>
+          <button class="btn-emergency-action childline" onclick="alert('Connecting to 1098 Childline India Helpline...')">
+            🧒 Call 1098 Childline India
+          </button>
+          <button class="btn-emergency-action dismiss" onclick="dismissEmergencyAlert()">
+            ✓ Acknowledge & Silence Siren (सुरक्षित हैं)
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== ADD OBSERVED PLACE MODAL ===================== -->
+  <div class="app-modal" id="modal-add-place">
+    <div class="modal-backdrop" onclick="closeAddPlaceModal()"></div>
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3>Naya Safe Zone Add Karein (सुरक्षित क्षेत्र)</h3>
+        <button class="modal-close-btn" onclick="closeAddPlaceModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <div class="form-group">
+          <label>Place Name (e.g., Aakash Institute, Nani's House)</label>
+          <input type="text" id="input-place-name" placeholder="e.g. Allen Coaching Institute" value="Aakash Coaching Centre">
+        </div>
+        <div class="form-group">
+          <label>Category Icon</label>
+          <div class="emoji-picker" id="emoji-picker">
+            <span class="emoji-opt active" onclick="selectPlaceEmoji('📚', this)">📚</span>
+            <span class="emoji-opt" onclick="selectPlaceEmoji('🏠', this)">🏠</span>
+            <span class="emoji-opt" onclick="selectPlaceEmoji('🏫', this)">🏫</span>
+            <span class="emoji-opt" onclick="selectPlaceEmoji('🌳', this)">🌳</span>
+            <span class="emoji-opt" onclick="selectPlaceEmoji('🏏', this)">🏏</span>
+            <span class="emoji-opt" onclick="selectPlaceEmoji('🚇', this)">🚇</span>
+          </div>
+        </div>
+        <div class="form-group">
+          <label>Safety Radius: <strong id="radius-val">250 meters</strong></label>
+          <input type="range" id="input-place-radius" min="50" max="1000" step="50" value="250" oninput="document.getElementById('radius-val').innerText = this.value + ' meters'">
+        </div>
+        <div class="form-group">
+          <label>Coordinates (Latitude, Longitude)</label>
+          <input type="text" id="input-place-coords" value="12.9740, 77.6425">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-action secondary" onclick="closeAddPlaceModal()">Cancel</button>
+        <button class="btn-action primary" onclick="saveNewObservedPlace()">Save Safe Zone</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== ADD / PAIR CHILD MODAL (OTP) ===================== -->
+  <div class="app-modal" id="modal-add-child">
+    <div class="modal-backdrop" onclick="closeAddChildModal()"></div>
+    <div class="modal-dialog">
+      <div class="modal-header">
+        <h3>Pair Child Smartwatch or Phone (OTP)</h3>
+        <button class="modal-close-btn" onclick="closeAddChildModal()">✕</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-desc">Enter this OTP in your child's Kid Buddy Bharat app or Noise/boAt Kids GPS Smartwatch:</p>
+        
+        <div class="otp-pairing-card">
+          <div class="otp-title">6-DIGIT VERIFICATION CODE (SWIFT-OTP)</div>
+          <div class="otp-display" id="otp-display-code">541 290</div>
+          <div class="otp-timer">Expires in <span id="otp-timer">04:59</span></div>
+        </div>
+
+        <div class="form-group">
+          <label>Child's Name (बच्चे का नाम)</label>
+          <input type="text" id="input-child-name" placeholder="Baccha's first name" value="Kabir">
+        </div>
+        <div class="form-group">
+          <label>Age (उम्र)</label>
+          <input type="number" id="input-child-age" value="7">
+        </div>
+        <div class="form-group">
+          <label>School / Standard</label>
+          <input type="text" id="input-child-school" value="DPS Bengaluru East, Class 2">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-action secondary" onclick="closeAddChildModal()">Cancel</button>
+        <button class="btn-action primary" onclick="confirmAddChild()">Complete Pairing</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== SWIFT CODE & REPO INSPECTOR MODAL ===================== -->
+  <div class="code-inspector-drawer" id="code-inspector-drawer">
+    <div class="drawer-header">
+      <div class="drawer-title">
+        <span>⚡ Cloned Swift Source Code Inspector</span>
+        <span class="badge-swift">Kid Buddy / Controllers</span>
+      </div>
+      <div class="drawer-actions">
+        <button class="btn-tiny" onclick="copyCurrentCode()">Copy Code</button>
+        <button class="modal-close-btn" onclick="toggleCodeInspector()">✕</button>
+      </div>
+    </div>
+    <div class="drawer-body">
+      <!-- File sidebar -->
+      <div class="code-file-sidebar" id="code-file-sidebar">
+        <div class="sidebar-section-title">SWIFT CONTROLLERS</div>
+        <div class="file-item active" onclick="loadSourceFile('Controllers/TrackingViewController.swift', this)">TrackingViewController.swift</div>
+        <div class="file-item" onclick="loadSourceFile('Controllers/ChatViewController.swift', this)">ChatViewController.swift</div>
+        <div class="file-item" onclick="loadSourceFile('Controllers/HistoryViewController.swift', this)">HistoryViewController.swift</div>
+        <div class="file-item" onclick="loadSourceFile('Controllers/AddObservedPlacesViewController.swift', this)">AddObservedPlacesViewController.swift</div>
+        <div class="file-item" onclick="loadSourceFile('Controllers/ListViewController.swift', this)">ListViewController.swift</div>
+        <div class="file-item" onclick="loadSourceFile('Controllers/AddChildViewController.swift', this)">AddChildViewController.swift</div>
+        
+        <div class="sidebar-section-title">UTILITIES & MODELS</div>
+        <div class="file-item" onclick="loadSourceFile('utilities/LocationHandler.swift', this)">LocationHandler.swift</div>
+        <div class="file-item" onclick="loadSourceFile('utilities/DataHandler.swift', this)">DataHandler.swift</div>
+        <div class="file-item" onclick="loadSourceFile('Models/User.swift', this)">User.swift</div>
+        <div class="file-item" onclick="loadSourceFile('supporting files/AppDelegate.swift', this)">AppDelegate.swift</div>
+      </div>
+
+      <!-- Code editor area -->
+      <div class="code-content-view">
+        <div class="code-filepath-bar" id="code-filepath-bar">Kid Buddy/Controllers/TrackingViewController.swift</div>
+        <pre class="code-pre"><code id="code-display" class="language-swift">Loading Swift code...</code></pre>
+      </div>
+    </div>
+  </div>
+
+  <script src="app.js"></script>
+</body>
+</html>
