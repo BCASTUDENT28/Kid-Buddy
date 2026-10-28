@@ -1,6 +1,7 @@
 # Secrets & Keys (Never commit to Git)
 serviceAccountKey.json
 *firebase-adminsdk*.json
+twilioConfig.json
 *.env
 .env.local
 

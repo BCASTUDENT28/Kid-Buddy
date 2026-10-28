@@ -43,6 +43,52 @@ try {
 }
 
 // ==========================================================================
+// Twilio SMS Integration (Emergency Alerts to Parents)
+// ==========================================================================
+const https = require('https');
+const querystring = require('querystring');
+let twilioConfig = null;
+
+try {
+  const twilioConfigPath = path.join(WEB_DIR, 'twilioConfig.json');
+  if (fs.existsSync(twilioConfigPath)) {
+    twilioConfig = JSON.parse(fs.readFileSync(twilioConfigPath, 'utf8'));
+    console.log('[Twilio] SMS Dispatcher initialized for:', twilioConfig.parentNumbers.join(', '));
+  }
+} catch (e) {
+  console.warn('[Twilio] Config error:', e.message);
+}
+
+function sendTwilioSMS(to, body) {
+  if (!twilioConfig) return;
+  const postData = querystring.stringify({
+    From: twilioConfig.fromNumber,
+    To: to,
+    Body: body
+  });
+
+  const req = https.request({
+    hostname: 'api.twilio.com',
+    path: `/2010-04-01/Accounts/${twilioConfig.accountSid}/Messages.json`,
+    method: 'POST',
+    headers: {
+      'Authorization': 'Basic ' + Buffer.from(`${twilioConfig.accountSid}:${twilioConfig.authToken}`).toString('base64'),
+      'Content-Type': 'application/x-www-form-urlencoded',
+      'Content-Length': Buffer.byteLength(postData)
+    }
+  }, res => {
+    let d = '';
+    res.on('data', c => d += c);
+    res.on('end', () => {
+      console.log(`[Twilio SMS Sent] To: ${to}, Status: ${res.statusCode}`);
+    });
+  });
+  req.on('error', err => console.error('[Twilio Error]:', err.message));
+  req.write(postData);
+  req.end();
+}
+
+// ==========================================================================
 // In-Memory Real-Time State & SSE Clients (Server-Sent Events)
 // ==========================================================================
 let sseClients = [];
@@ -158,9 +204,21 @@ const server = http.createServer((req, res) => {
             timestamp: Date.now()
           });
         }
+
+        // Send Twilio Emergency SOS SMS to Parents
+        if (twilioConfig && Array.isArray(twilioConfig.parentNumbers)) {
+          const childName = data.childName || 'Child';
+          const lat = data.lat ? Number(data.lat).toFixed(4) : '28.6139';
+          const lng = data.lng ? Number(data.lng).toFixed(4) : '77.2090';
+          const smsText = `🚨 [KID BUDDY 112 SOS ALERT] ${childName} ne Emergency Alert Trigger kiya hai! Live GPS: https://surakshya321.bcastudent321.workers.dev/ (Lat: ${lat}, Lng: ${lng}, Battery: ${data.battery || 85}%). Please check immediately!`;
+          twilioConfig.parentNumbers.forEach(num => {
+            sendTwilioSMS(num, smsText);
+          });
+        }
+
         broadcastSSE('emergency_sos', data);
         res.writeHead(200, { 'Content-Type': 'application/json' });
-        res.end(JSON.stringify({ success: true, alertBroadcast: true }));
+        res.end(JSON.stringify({ success: true, alertBroadcast: true, smsDispatched: !!twilioConfig }));
       } catch (err) {
         res.writeHead(400, { 'Content-Type': 'application/json' });
         res.end(JSON.stringify({ error: err.message }));
