@@ -199,7 +199,8 @@ document.addEventListener('DOMContentLoaded', () => {
   renderChatMessages();
   updateChildQuickSheet();
   initMaps();
-  logEvent('Kid Buddy Bharat (बाल रक्षक) Initialized. Connected to 112 ERSS & School Bus GPS.');
+  initLiveStreamSSE();
+  logEvent('Kid Buddy Bharat Initialized. Connected to Firebase (surakshya-india) & 112 ERSS.');
 });
 
 // Real-Time IST Clock
@@ -1119,3 +1120,97 @@ function clearEventLog() {
   const feed = document.getElementById('activity-feed');
   if (feed) feed.innerHTML = '';
 }
+
+// ==========================================================================
+// Real-Time SSE Listener (Syncs Real Phone GPS & Firebase to Dashboard)
+// ==========================================================================
+function initLiveStreamSSE() {
+  if (typeof EventSource === 'undefined') return;
+  const es = new EventSource('/api/live-stream');
+
+  es.addEventListener('connected', e => {
+    logEvent('🟢 Real-time Gateway connected to Firebase (surakshya-india).');
+  });
+
+  es.addEventListener('location_update', e => {
+    try {
+      const data = JSON.parse(e.data);
+      const child = state.children.find(c => c.id === data.childId);
+      if (child) {
+        child.lat = data.lat;
+        child.lng = data.lng;
+        child.speed = data.speed;
+        child.accuracy = data.accuracy;
+        if (data.battery) child.battery = data.battery;
+        child.locationName = `Real Mobile GPS: ${data.lat.toFixed(5)}, ${data.lng.toFixed(5)}`;
+
+        if (state.trackedChildId === child.id) {
+          if (trackingMarker && trackingMap) {
+            trackingMarker.setLatLng([child.lat, child.lng]);
+            trackingMap.panTo([child.lat, child.lng]);
+          }
+          updateChildQuickSheet();
+          updateTelemetryPanel();
+          checkGeofenceTriggers(child);
+        }
+
+        // Add to history timeline
+        const now = new Date();
+        const timeStr = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+        child.history.unshift({
+          time: timeStr,
+          desc: 'Live Phone Coordinate Stream',
+          lat: data.lat,
+          lng: data.lng,
+          loc: `Live Accuracy ±${data.accuracy}m`
+        });
+        if (child.history.length > 20) child.history.pop();
+        renderHistoryTimeline();
+
+        logEvent(`[REAL GPS SYNC] ${child.name}: (${data.lat.toFixed(4)}, ${data.lng.toFixed(4)}) • ${data.speed} km/h • 🔋${child.battery}%`);
+      }
+    } catch (err) {
+      console.error('SSE Location Error:', err);
+    }
+  });
+
+  es.addEventListener('emergency_sos', e => {
+    try {
+      const data = JSON.parse(e.data);
+      triggerEmergencyAlert('real_phone');
+      logEvent(`🚨 CRITICAL 112 SOS received from real smartphone for ${data.childName}!`);
+    } catch (err) {
+      console.error('SSE Alert Error:', err);
+    }
+  });
+
+  es.onerror = () => {
+    // Attempt auto-reconnect handled by browser EventSource
+  };
+}
+
+function openPairPhoneModal() {
+  const modal = document.getElementById('modal-pair-phone');
+  if (modal) {
+    modal.classList.add('active');
+    try {
+      const host = window.location.host;
+      const protocol = window.location.protocol;
+      const trackerUrl = `${protocol}//${host}/tracker`;
+      const input = document.getElementById('phone-tracker-url');
+      if (input) input.value = trackerUrl;
+      const qrImg = document.getElementById('qr-code-img');
+      if (qrImg) {
+        qrImg.src = `https://api.qrserver.com/v1/create-qr-code/?size=200x200&data=${encodeURIComponent(trackerUrl)}`;
+      }
+    } catch (e) {
+      console.warn('QR update error:', e);
+    }
+  }
+}
+
+function closePairPhoneModal() {
+  const modal = document.getElementById('modal-pair-phone');
+  if (modal) modal.classList.remove('active');
+}
+

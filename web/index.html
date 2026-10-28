@@ -81,6 +81,10 @@
         </button>
       </div>
 
+      <button class="pair-phone-btn" id="btn-open-pair-modal" onclick="openPairPhoneModal()" title="Pair Real Mobile Phone">
+        📲 Pair Real Phone
+      </button>
+
       <button class="sos-global-btn" id="btn-global-sos" onclick="triggerEmergencyAlert('manual')">
         <span class="sos-pulse"></span>
         🚨 112 SOS
@@ -756,6 +760,56 @@
       <div class="modal-footer">
         <button class="btn-action secondary" onclick="closeAddChildModal()">Cancel</button>
         <button class="btn-action primary" onclick="confirmAddChild()">Complete Pairing</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- ===================== PAIR REAL SMARTPHONE / QR CODE MODAL ===================== -->
+  <div class="app-modal" id="modal-pair-phone">
+    <div class="modal-backdrop" onclick="closePairPhoneModal()"></div>
+    <div class="modal-dialog" style="max-width: 480px;">
+      <div class="modal-header">
+        <div style="display: flex; align-items: center; gap: 8px;">
+          <span style="font-size: 1.3rem;">📲</span>
+          <h3 style="font-size: 1.05rem;">Connect Real Mobile Phone</h3>
+        </div>
+        <button class="modal-close-btn" onclick="closePairPhoneModal()">✕</button>
+      </div>
+      <div class="modal-body" style="gap: 16px;">
+        <div style="background: rgba(16, 185, 129, 0.1); border: 1px solid rgba(16, 185, 129, 0.3); border-radius: 12px; padding: 12px; display: flex; align-items: center; gap: 10px;">
+          <span style="font-size: 1.4rem;">☁️</span>
+          <div>
+            <div style="font-size: 0.8rem; font-weight: 800; color: #10b981;">FIREBASE REALTIME DATABASE LIVE</div>
+            <div style="font-size: 0.72rem; color: #cbd5e1; word-break: break-all;">surakshya-india-default-rtdb.asia-southeast1.firebasedatabase.app</div>
+          </div>
+        </div>
+
+        <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; background: #fff; padding: 16px; border-radius: 16px; width: fit-content; margin: 0 auto; box-shadow: 0 8px 24px rgba(0,0,0,0.4);">
+          <img id="qr-code-img" src="https://api.qrserver.com/v1/create-qr-code/?size=180x180&data=http://172.20.10.3:8095/tracker" alt="Scan QR Code" style="width: 170px; height: 170px; display: block; border-radius: 8px;">
+          <span style="color: #0f172a; font-size: 0.75rem; font-weight: 800; margin-top: 8px;">SCAN WITH PHONE CAMERA</span>
+        </div>
+
+        <div class="form-group">
+          <label style="font-weight: 700;">Direct Phone Tracker Link (Open in Mobile Browser):</label>
+          <div style="display: flex; gap: 8px;">
+            <input type="text" id="phone-tracker-url" readonly value="http://172.20.10.3:8095/tracker" style="flex: 1; font-family: monospace; font-size: 0.8rem; background: rgba(0,0,0,0.3);">
+            <button class="btn-action secondary" onclick="navigator.clipboard.writeText(document.getElementById('phone-tracker-url').value); alert('Copied to clipboard!');" style="white-space: nowrap; padding: 8px 12px; font-size: 0.75rem;">📋 Copy</button>
+            <a href="/tracker" target="_blank" class="btn-action primary" style="text-decoration: none; display: inline-flex; align-items: center; font-size: 0.75rem; padding: 8px 12px;">Open Tab ↗</a>
+          </div>
+        </div>
+
+        <div style="background: rgba(255, 255, 255, 0.04); border: 1px solid rgba(255, 255, 255, 0.08); border-radius: 12px; padding: 12px; font-size: 0.78rem; line-height: 1.5; color: #94a3b8;">
+          <strong style="color: #f97316;">How it works (यह कैसे काम करता है):</strong>
+          <ol style="margin-left: 18px; margin-top: 6px; display: flex; flex-direction: column; gap: 4px;">
+            <li>Apne phone par camera ya browser se yeh link kholein.</li>
+            <li>Child select karein (<strong>Arpit Kaur</strong>, <strong>Alisha</strong>, ya <strong>Neerja Thakur</strong>).</li>
+            <li>Tap karein <strong>"START LIVE GPS SHARING"</strong>.</li>
+            <li>Phone ka live GPS + battery + speed sidha Firebase aur aapke is dashboard par real-time move hoga!</li>
+          </ol>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn-action secondary" onclick="closePairPhoneModal()">Close</button>
       </div>
     </div>
   </div>

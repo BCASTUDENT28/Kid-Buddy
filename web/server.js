@@ -6,6 +6,60 @@ const PORT = process.env.PORT || 8095;
 const WEB_DIR = __dirname;
 const REPO_ROOT = path.resolve(__dirname, '..');
 
+// ==========================================================================
+// Firebase Admin SDK Initialization (Surakshya-India)
+// ==========================================================================
+let firebaseAdmin = null;
+let firebaseDb = null;
+const FIREBASE_DB_URL = 'https://surakshya-india-default-rtdb.asia-southeast1.firebasedatabase.app/';
+
+try {
+  const serviceAccountPath = path.join(WEB_DIR, 'serviceAccountKey.json');
+  if (fs.existsSync(serviceAccountPath)) {
+    const admin = require('firebase-admin');
+    const { getDatabase } = require('firebase-admin/database');
+    const serviceAccount = require(serviceAccountPath);
+    
+    const app = admin.initializeApp({
+      credential: admin.cert(serviceAccount),
+      databaseURL: FIREBASE_DB_URL
+    });
+
+    firebaseAdmin = admin;
+    firebaseDb = getDatabase(app);
+    console.log('[Firebase] Successfully connected to Surakshya-India Realtime Database!');
+
+    // Initialize root nodes
+    firebaseDb.ref('system_status').set({
+      connected: true,
+      lastOnline: new Date().toISOString(),
+      edition: 'Bharat Edition (बाल रक्षक)'
+    });
+  } else {
+    console.warn('[Firebase] serviceAccountKey.json not found in web dir. Running in standalone mode.');
+  }
+} catch (err) {
+  console.error('[Firebase] Initialization error:', err.message);
+}
+
+// ==========================================================================
+// In-Memory Real-Time State & SSE Clients (Server-Sent Events)
+// ==========================================================================
+let sseClients = [];
+let latestLocations = {};
+
+function broadcastSSE(eventType, data) {
+  const payload = `event: ${eventType}\ndata: ${JSON.stringify(data)}\n\n`;
+  sseClients.forEach(client => {
+    try {
+      client.write(payload);
+    } catch (e) {
+      // client disconnected
+    }
+  });
+}
+
+// MIME Types
 const MIME_TYPES = {
   '.html': 'text/html; charset=UTF-8',
   '.css': 'text/css; charset=UTF-8',
@@ -22,12 +76,110 @@ const MIME_TYPES = {
   '.swift': 'text/plain; charset=UTF-8'
 };
 
+// ==========================================================================
+// HTTP Server & Real-Time API
+// ==========================================================================
 const server = http.createServer((req, res) => {
-  // Normalize URL
+  // Enable CORS for mobile browsers & Cloudflare Tunnel
+  res.setHeader('Access-Control-Allow-Origin', '*');
+  res.setHeader('Access-Control-Allow-Methods', 'GET, POST, OPTIONS');
+  res.setHeader('Access-Control-Allow-Headers', 'Content-Type');
+
+  if (req.method === 'OPTIONS') {
+    res.writeHead(204);
+    return res.end();
+  }
+
   const reqUrl = new URL(req.url, `http://${req.headers.host}`);
   let pathname = reqUrl.pathname;
 
-  // API Endpoint: get app icon
+  // 1. API Endpoint: SSE Live Stream (Server-Sent Events)
+  if (pathname === '/api/live-stream') {
+    res.writeHead(200, {
+      'Content-Type': 'text/event-stream',
+      'Cache-Control': 'no-cache',
+      'Connection': 'keep-alive'
+    });
+    res.write('event: connected\ndata: {"status":"connected","firebase":' + (firebaseDb ? 'true' : 'false') + '}\n\n');
+    sseClients.push(res);
+
+    req.on('close', () => {
+      sseClients = sseClients.filter(c => c !== res);
+    });
+    return;
+  }
+
+  // 2. API Endpoint: POST live GPS coordinates from real smartphone
+  if (pathname === '/api/location' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => {
+      try {
+        const data = JSON.parse(body);
+        const childId = data.childId || 'child_1';
+        data.serverTime = Date.now();
+        latestLocations[childId] = data;
+
+        // Sync directly to Firebase Realtime Database
+        if (firebaseDb) {
+          firebaseDb.ref(`locations/${childId}`).set(data);
+          firebaseDb.ref(`history/${childId}/${Date.now()}`).set({
+            lat: data.lat,
+            lng: data.lng,
+            speed: data.speed,
+            time: new Date().toLocaleTimeString()
+          });
+        }
+
+        // Broadcast to all open Parent Dashboards in real time
+        broadcastSSE('location_update', data);
+
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, syncedToFirebase: !!firebaseDb }));
+      } catch (err) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: err.message }));
+      }
+    });
+    return;
+  }
+
+  // 3. API Endpoint: POST Emergency SOS Alert
+  if (pathname === '/api/emergency' && req.method === 'POST') {
+    let body = '';
+    req.on('data', chunk => { body += chunk; });
+    req.on('end', () => {
+      try {
+        const data = JSON.parse(body);
+        if (firebaseDb) {
+          firebaseDb.ref(`alerts/${Date.now()}`).set({
+            ...data,
+            resolved: false,
+            timestamp: Date.now()
+          });
+        }
+        broadcastSSE('emergency_sos', data);
+        res.writeHead(200, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ success: true, alertBroadcast: true }));
+      } catch (err) {
+        res.writeHead(400, { 'Content-Type': 'application/json' });
+        res.end(JSON.stringify({ error: err.message }));
+      }
+    });
+    return;
+  }
+
+  // 4. API Endpoint: Get Firebase Status & Keys
+  if (pathname === '/api/firebase-info') {
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({
+      connected: !!firebaseDb,
+      databaseURL: FIREBASE_DB_URL,
+      projectId: 'surakshya-india'
+    }));
+  }
+
+  // 5. Static Assets from iOS repo
   if (pathname === '/api/icon') {
     const iconPath = path.join(REPO_ROOT, 'Kid Buddy', 'supporting files', 'Assets.xcassets', 'AppIcon.appiconset', '1024.png');
     if (fs.existsSync(iconPath)) {
@@ -36,7 +188,6 @@ const server = http.createServer((req, res) => {
     }
   }
 
-  // API Endpoint: get person icon
   if (pathname === '/api/person-icon') {
     const personPath = path.join(REPO_ROOT, 'Kid Buddy', 'supporting files', 'Assets.xcassets', 'person.imageset', 'person.png');
     if (fs.existsSync(personPath)) {
@@ -45,7 +196,6 @@ const server = http.createServer((req, res) => {
     }
   }
 
-  // API Endpoint: get critical alert sound
   if (pathname === '/api/sound/sos') {
     const soundPath = path.join(REPO_ROOT, 'Kid Buddy', 'supporting files', 'criticalAlert.wav');
     if (fs.existsSync(soundPath)) {
@@ -59,7 +209,7 @@ const server = http.createServer((req, res) => {
     }
   }
 
-  // API Endpoint: list Swift source files
+  // 6. Swift Source Code APIs
   if (pathname === '/api/source-tree') {
     try {
       const getSwiftFiles = (dir, base = '') => {
@@ -87,7 +237,6 @@ const server = http.createServer((req, res) => {
     }
   }
 
-  // API Endpoint: read specific file content
   if (pathname === '/api/source-file') {
     const filePathParam = reqUrl.searchParams.get('file');
     if (!filePathParam || filePathParam.includes('..')) {
@@ -105,9 +254,11 @@ const server = http.createServer((req, res) => {
     }
   }
 
-  // Static file serving from WEB_DIR
-  if (pathname === '/') {
+  // 7. Routes for Pages
+  if (pathname === '/' || pathname === '/index.html') {
     pathname = '/index.html';
+  } else if (pathname === '/tracker' || pathname === '/tracker.html') {
+    pathname = '/tracker.html';
   }
 
   const safePath = path.normalize(pathname).replace(/^(\.\.[\/\\])+/, '');
@@ -133,5 +284,7 @@ const server = http.createServer((req, res) => {
 });
 
 server.listen(PORT, '0.0.0.0', () => {
-  console.log(`[Kid Buddy] Server is running on http://localhost:${PORT}`);
+  console.log(`[Kid Buddy Bharat] Live Server is running on http://localhost:${PORT}`);
+  console.log(`[Firebase Status] Connected to: ${FIREBASE_DB_URL}`);
+  console.log(`[Mobile Tracker] Open http://localhost:${PORT}/tracker on any smartphone`);
 });

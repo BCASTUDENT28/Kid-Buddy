@@ -2445,3 +2445,28 @@ body.fullscreen-view .dynamic-island,
 body.fullscreen-view .ios-home-indicator {
   display: none;
 }
+
+/* Pair Real Phone Button */
+.pair-phone-btn {
+  background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+  color: #fff;
+  border: 1px solid rgba(16, 185, 129, 0.4);
+  padding: 8px 14px;
+  border-radius: 12px;
+  font-family: inherit;
+  font-size: 0.82rem;
+  font-weight: 700;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  box-shadow: 0 4px 14px rgba(16, 185, 129, 0.3);
+  transition: all 0.2s ease;
+}
+
+.pair-phone-btn:hover {
+  transform: translateY(-1px);
+  box-shadow: 0 6px 18px rgba(16, 185, 129, 0.5);
+  background: linear-gradient(135deg, #059669 0%, #10b981 100%);
+}
+

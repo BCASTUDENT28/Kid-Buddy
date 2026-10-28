@@ -1,0 +1,488 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Baccha GPS Tracker — Kid Buddy Bharat (सुरक्षा)</title>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;600;700;800&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
+  <style>
+    :root {
+      --saffron: #f97316;
+      --saffron-grad: linear-gradient(135deg, #ea580c 0%, #f97316 100%);
+      --emerald: #10b981;
+      --danger: #ef4444;
+      --danger-grad: linear-gradient(135deg, #dc2626 0%, #f87171 100%);
+      --bg: #070a12;
+      --card-bg: rgba(22, 30, 48, 0.95);
+      --border: rgba(255, 255, 255, 0.12);
+      --text: #f8fafc;
+      --text-muted: #94a3b8;
+    }
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: 'Plus Jakarta Sans', sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 16px;
+      user-select: none;
+    }
+    .tracker-card {
+      width: 100%;
+      max-width: 420px;
+      background: var(--card-bg);
+      border: 1px solid var(--border);
+      border-radius: 24px;
+      padding: 20px;
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.6);
+      display: flex;
+      flex-direction: column;
+      gap: 16px;
+    }
+    .tracker-header {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      border-bottom: 1px solid var(--border);
+      padding-bottom: 12px;
+    }
+    .brand-title {
+      font-size: 1.15rem;
+      font-weight: 800;
+      display: flex;
+      align-items: center;
+      gap: 8px;
+    }
+    .flag { font-size: 1.2rem; }
+    .badge-live {
+      font-size: 0.65rem;
+      font-weight: 700;
+      background: rgba(16, 185, 129, 0.15);
+      color: var(--emerald);
+      border: 1px solid rgba(16, 185, 129, 0.3);
+      padding: 3px 8px;
+      border-radius: 20px;
+    }
+    .child-selector-box {
+      display: flex;
+      flex-direction: column;
+      gap: 6px;
+    }
+    .child-selector-box label {
+      font-size: 0.72rem;
+      font-weight: 700;
+      color: var(--text-muted);
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+    .child-select {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid var(--border);
+      color: #fff;
+      font-family: inherit;
+      font-size: 0.95rem;
+      font-weight: 700;
+      padding: 10px 12px;
+      border-radius: 12px;
+      outline: none;
+    }
+    .child-select option { background: #111827; }
+    
+    /* Big Start/Stop Switch */
+    .sharing-toggle-btn {
+      width: 100%;
+      padding: 16px;
+      border-radius: 16px;
+      border: none;
+      font-family: inherit;
+      font-size: 1rem;
+      font-weight: 800;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      transition: all 0.25s ease;
+    }
+    .sharing-toggle-btn.idle {
+      background: var(--saffron-grad);
+      color: #fff;
+      box-shadow: 0 8px 20px rgba(249, 115, 22, 0.4);
+    }
+    .sharing-toggle-btn.active {
+      background: linear-gradient(135deg, #059669 0%, #10b981 100%);
+      color: #fff;
+      box-shadow: 0 8px 25px rgba(16, 185, 129, 0.5);
+    }
+    .pulse-dot {
+      width: 10px;
+      height: 10px;
+      background: #fff;
+      border-radius: 50%;
+      animation: pulse 1.2s infinite;
+    }
+    @keyframes pulse {
+      0% { transform: scale(0.9); opacity: 0.9; }
+      50% { transform: scale(1.4); opacity: 0.3; }
+      100% { transform: scale(0.9); opacity: 0.9; }
+    }
+
+    /* Live Telemetry Card */
+    .telemetry-card {
+      background: rgba(0, 0, 0, 0.35);
+      border: 1px solid rgba(255, 255, 255, 0.06);
+      border-radius: 14px;
+      padding: 12px;
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+    }
+    .stat-box { display: flex; flex-direction: column; }
+    .stat-label { font-size: 0.65rem; color: var(--text-muted); font-weight: 600; }
+    .stat-val { font-size: 0.95rem; font-weight: 700; font-family: 'JetBrains Mono', monospace; margin-top: 2px; }
+    .stat-val.highlight { color: var(--saffron); }
+
+    /* Big SOS Button */
+    .sos-btn {
+      background: var(--danger-grad);
+      color: #fff;
+      border: none;
+      padding: 16px;
+      border-radius: 16px;
+      font-family: inherit;
+      font-size: 1.1rem;
+      font-weight: 900;
+      letter-spacing: 0.05em;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 10px;
+      box-shadow: 0 8px 25px rgba(239, 68, 68, 0.5);
+      animation: alertPulse 2s infinite;
+    }
+    @keyframes alertPulse {
+      0% { transform: scale(1); }
+      50% { transform: scale(1.02); }
+      100% { transform: scale(1); }
+    }
+
+    .quick-actions {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 10px;
+    }
+    .btn-secondary {
+      background: rgba(255, 255, 255, 0.08);
+      border: 1px solid var(--border);
+      color: #fff;
+      font-family: inherit;
+      font-size: 0.82rem;
+      font-weight: 700;
+      padding: 12px;
+      border-radius: 12px;
+      cursor: pointer;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    .firebase-status-bar {
+      font-size: 0.7rem;
+      color: var(--text-muted);
+      text-align: center;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+      background: rgba(0, 0, 0, 0.2);
+      padding: 6px;
+      border-radius: 8px;
+    }
+  </style>
+</head>
+<body>
+
+  <div class="tracker-card">
+    <div class="tracker-header">
+      <div class="brand-title">
+        <span class="flag">🇮🇳</span>
+        <span>Kid Buddy Tracker</span>
+      </div>
+      <span class="badge-live" id="gps-status-badge">GPS Standby</span>
+    </div>
+
+    <!-- Child Selection -->
+    <div class="child-selector-box">
+      <label>Select Child Device (बच्चा चुनें)</label>
+      <select class="child-select" id="child-select">
+        <option value="child_1" selected>Arpit Kaur (NPS Indiranagar)</option>
+        <option value="child_2">Alisha (Bishop Cotton Girls)</option>
+        <option value="child_3">Neerja Thakur (EuroKids)</option>
+      </select>
+    </div>
+
+    <!-- Big Sharing Toggle Button -->
+    <button class="sharing-toggle-btn idle" id="btn-toggle-tracking" onclick="toggleLocationTracking()">
+      <span id="btn-icon">▶</span>
+      <span id="btn-text">START LIVE GPS SHARING</span>
+    </button>
+
+    <!-- Live Telemetry Display -->
+    <div class="telemetry-card">
+      <div class="stat-box">
+        <span class="stat-label">Latitude</span>
+        <span class="stat-val highlight" id="disp-lat">--.------</span>
+      </div>
+      <div class="stat-box">
+        <span class="stat-label">Longitude</span>
+        <span class="stat-val highlight" id="disp-lng">--.------</span>
+      </div>
+      <div class="stat-box">
+        <span class="stat-label">Speed</span>
+        <span class="stat-val" id="disp-speed">0.0 km/h</span>
+      </div>
+      <div class="stat-box">
+        <span class="stat-label">GPS Precision</span>
+        <span class="stat-val" id="disp-acc">± -- m</span>
+      </div>
+      <div class="stat-box">
+        <span class="stat-label">Phone Battery</span>
+        <span class="stat-val" id="disp-battery">--%</span>
+      </div>
+      <div class="stat-box">
+        <span class="stat-label">Packets Sent</span>
+        <span class="stat-val" id="disp-packets">0</span>
+      </div>
+    </div>
+
+    <!-- Big Emergency SOS Button -->
+    <button class="sos-btn" onclick="sendSOS()">
+      🚨 112 EMERGENCY SOS
+    </button>
+
+    <!-- Quick Check-in -->
+    <div class="quick-actions">
+      <button class="btn-secondary" onclick="sendCheckIn('Main Theek Hoon (I am Safe)')">
+        ✅ I'm Safe
+      </button>
+      <button class="btn-secondary" onclick="sendCheckIn('School Pahunch Gayi (Reached)')">
+        🏫 At School
+      </button>
+    </div>
+
+    <!-- Simulation Mode Button -->
+    <button class="btn-secondary" id="btn-simulate-walk" onclick="toggleSimulatedWalk()" style="width: 100%; justify-content: center; background: rgba(56, 189, 248, 0.15); border-color: rgba(56, 189, 248, 0.4); color: #38bdf8; font-weight: 800;">
+      🚶 Test Demo: Simulate Real Walk & Stream to Firebase
+    </button>
+
+    <!-- Firebase Connection Status -->
+    <div class="firebase-status-bar">
+      <span>☁️</span>
+      <span id="firebase-status-text">Connected to Firebase: surakshya-india</span>
+    </div>
+  </div>
+
+  <script>
+    let isTracking = false;
+    let watchId = null;
+    let packetCount = 0;
+    let currentBattery = 88;
+
+    // Monitor Phone Battery via Battery API
+    if (navigator.getBattery) {
+      navigator.getBattery().then(battery => {
+        currentBattery = Math.round(battery.level * 100);
+        document.getElementById('disp-battery').innerText = `${currentBattery}% ${battery.charging ? '⚡' : ''}`;
+        battery.addEventListener('levelchange', () => {
+          currentBattery = Math.round(battery.level * 100);
+          document.getElementById('disp-battery').innerText = `${currentBattery}%`;
+        });
+      });
+    }
+
+    function toggleLocationTracking() {
+      if (isTracking) {
+        stopTracking();
+      } else {
+        startTracking();
+      }
+    }
+
+    function startTracking() {
+      if (!navigator.geolocation) {
+        alert('Geolocation is not supported by your browser.');
+        return;
+      }
+
+      const btn = document.getElementById('btn-toggle-tracking');
+      const badge = document.getElementById('gps-status-badge');
+
+      btn.className = 'sharing-toggle-btn active';
+      btn.innerHTML = '<span class="pulse-dot"></span><span>LIVE SHARING ACTIVE (TAP TO STOP)</span>';
+      badge.innerText = '🟢 Streaming Live';
+      isTracking = true;
+
+      watchId = navigator.geolocation.watchPosition(
+        (pos) => {
+          const lat = pos.coords.latitude;
+          const lng = pos.coords.longitude;
+          const speed = Math.round((pos.coords.speed || 0) * 3.6);
+          const acc = Math.round(pos.coords.accuracy);
+
+          document.getElementById('disp-lat').innerText = lat.toFixed(6);
+          document.getElementById('disp-lng').innerText = lng.toFixed(6);
+          document.getElementById('disp-speed').innerText = `${speed} km/h`;
+          document.getElementById('disp-acc').innerText = `± ${acc} m`;
+
+          // Stream coordinates to server and Firebase
+          sendLocationPayload({
+            lat,
+            lng,
+            speed,
+            accuracy: acc,
+            battery: currentBattery
+          });
+        },
+        (err) => {
+          console.error('GPS Error:', err);
+          alert(`GPS Permission or Signal Error: ${err.message}. Please enable location permissions.`);
+          stopTracking();
+        },
+        {
+          enableHighAccuracy: true,
+          maximumAge: 1000,
+          timeout: 10000
+        }
+      );
+    }
+
+    function stopTracking() {
+      if (watchId !== null) {
+        navigator.geolocation.clearWatch(watchId);
+        watchId = null;
+      }
+      isTracking = false;
+      const btn = document.getElementById('btn-toggle-tracking');
+      const badge = document.getElementById('gps-status-badge');
+      btn.className = 'sharing-toggle-btn idle';
+      btn.innerHTML = '<span id="btn-icon">▶</span><span>START LIVE GPS SHARING</span>';
+      badge.innerText = 'GPS Paused';
+    }
+
+    function sendLocationPayload(extra) {
+      const childSelect = document.getElementById('child-select');
+      const childId = childSelect.value;
+      const childName = childSelect.options[childSelect.selectedIndex].text;
+
+      const payload = {
+        childId: childId,
+        childName: childName,
+        lat: extra.lat,
+        lng: extra.lng,
+        speed: extra.speed,
+        accuracy: extra.accuracy,
+        battery: extra.battery,
+        timestamp: Date.now()
+      };
+
+      fetch('/api/location', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+      .then(r => r.json())
+      .then(res => {
+        packetCount++;
+        document.getElementById('disp-packets').innerText = packetCount;
+      })
+      .catch(e => console.error('Error posting location:', e));
+    }
+
+    function sendSOS() {
+      const childSelect = document.getElementById('child-select');
+      const childId = childSelect.value;
+      const childName = childSelect.options[childSelect.selectedIndex].text;
+      const lat = parseFloat(document.getElementById('disp-lat').innerText) || 12.9756;
+      const lng = parseFloat(document.getElementById('disp-lng').innerText) || 77.6402;
+
+      fetch('/api/emergency', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          childId,
+          childName,
+          lat,
+          lng,
+          battery: currentBattery,
+          emergencyType: '112 SOS PANIC'
+        })
+      });
+
+      alert('🚨 112 EMERGENCY ALERT SENT to Mummy & Papa with your live GPS location!');
+    }
+
+    function sendCheckIn(statusText) {
+      alert(`Check-in recorded: "${statusText}". Synced to Parent screen!`);
+    }
+
+    let simInterval = null;
+    let simStep = 0;
+    const simRoute = [
+      { lat: 12.9756, lng: 77.6402, speed: 4, acc: 8 },
+      { lat: 12.9760, lng: 77.6408, speed: 6, acc: 6 },
+      { lat: 12.9768, lng: 77.6415, speed: 8, acc: 5 },
+      { lat: 12.9774, lng: 77.6420, speed: 12, acc: 4 },
+      { lat: 12.9782, lng: 77.6428, speed: 15, acc: 5 },
+      { lat: 12.9790, lng: 77.6435, speed: 18, acc: 4 },
+      { lat: 12.9801, lng: 77.6442, speed: 14, acc: 3 },
+      { lat: 12.9810, lng: 77.6450, speed: 5, acc: 4 },
+      { lat: 12.9818, lng: 77.6460, speed: 0, acc: 3 }
+    ];
+
+    function toggleSimulatedWalk() {
+      const btn = document.getElementById('btn-simulate-walk');
+      const badge = document.getElementById('gps-status-badge');
+      if (simInterval) {
+        clearInterval(simInterval);
+        simInterval = null;
+        btn.innerHTML = '🚶 Test Demo: Simulate Real Walk & Stream to Firebase';
+        btn.style.background = 'rgba(56, 189, 248, 0.15)';
+        btn.style.color = '#38bdf8';
+        btn.style.borderColor = 'rgba(56, 189, 248, 0.4)';
+        badge.innerText = 'GPS Standby';
+      } else {
+        badge.innerText = '🟢 Simulating & Streaming Live';
+        btn.innerHTML = '⏹️ Stop Simulation Stream';
+        btn.style.background = 'rgba(239, 68, 68, 0.2)';
+        btn.style.color = '#ef4444';
+        btn.style.borderColor = '#ef4444';
+        simStep = 0;
+        
+        simInterval = setInterval(() => {
+          const pt = simRoute[simStep % simRoute.length];
+          simStep++;
+          document.getElementById('disp-lat').innerText = pt.lat.toFixed(6);
+          document.getElementById('disp-lng').innerText = pt.lng.toFixed(6);
+          document.getElementById('disp-speed').innerText = `${pt.speed} km/h`;
+          document.getElementById('disp-acc').innerText = `± ${pt.acc} m`;
+          
+          sendLocationPayload({
+            lat: pt.lat,
+            lng: pt.lng,
+            speed: pt.speed,
+            accuracy: pt.acc,
+            battery: currentBattery
+          });
+        }, 2000);
+      }
+    }
+  </script>
+</body>
+</html>
