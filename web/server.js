@@ -126,13 +126,13 @@ if (firebaseDb) {
     if (Date.now() - (alertData.timestamp || 0) < 300000) {
       console.log('[Firebase Alert Sync]:', alertData.childName, alertData.emergencyType);
       if (twilioConfig && Array.isArray(twilioConfig.parentNumbers)) {
-        const childName = alertData.childName || 'Child';
+        const childName = alertData.childName || 'Child 1 Arpit';
         const lat = alertData.lat ? Number(alertData.lat).toFixed(4) : 'N/A';
         const lng = alertData.lng ? Number(alertData.lng).toFixed(4) : 'N/A';
-        const smsText = `EMERGENCY ALERT: Kid Buddy child alert! ${childName} has triggered 112 SOS panic alert at Lat ${lat}, Lng ${lng}. Battery: ${alertData.battery || 85}%. Check Kid Buddy dashboard immediately.`;
+        const battery = alertData.battery || 85;
+        const smsText = `EMERGENCY ALERT: ${childName.toUpperCase()} WANT SOS! GPS Lat: ${lat}, Lng: ${lng}, Battery: ${battery}%. Please check Kid Buddy app immediately.`;
         twilioConfig.parentNumbers.forEach(num => {
-          makeTwilioCall(num, childName); // Instant Voice Call
-          sendTwilioSMS(num, smsText);     // SMS Alert
+          sendTwilioSMS(num, smsText);     // Only SMS Message (No Voice Calls)
         });
       }
       broadcastSSE('emergency_sos', alertData);
@@ -257,12 +257,13 @@ const server = http.createServer((req, res) => {
           });
         }
 
-        // Send Twilio Emergency SOS SMS to Parents
+        // Send Twilio Emergency SOS SMS to Parents (Only SMS, No Calls)
         if (twilioConfig && Array.isArray(twilioConfig.parentNumbers)) {
-          const childName = data.childName || 'Child';
+          const childName = data.childName || 'Child 1 Arpit';
           const lat = data.lat ? Number(data.lat).toFixed(4) : '28.6139';
           const lng = data.lng ? Number(data.lng).toFixed(4) : '77.2090';
-          const smsText = `🚨 [KID BUDDY 112 SOS ALERT] ${childName} ne Emergency Alert Trigger kiya hai! Live GPS: https://surakshya321.bcastudent321.workers.dev/ (Lat: ${lat}, Lng: ${lng}, Battery: ${data.battery || 85}%). Please check immediately!`;
+          const battery = data.battery || 85;
+          const smsText = `EMERGENCY ALERT: ${childName.toUpperCase()} WANT SOS! GPS Lat: ${lat}, Lng: ${lng}, Battery: ${battery}%. Please check Kid Buddy app immediately.`;
           twilioConfig.parentNumbers.forEach(num => {
             sendTwilioSMS(num, smsText);
           });
