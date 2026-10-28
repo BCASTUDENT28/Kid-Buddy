@@ -376,6 +376,8 @@
       badge.innerText = 'GPS Paused';
     }
 
+    const FIREBASE_REST_URL = 'https://surakshya-india-default-rtdb.asia-southeast1.firebasedatabase.app';
+
     function sendLocationPayload(extra) {
       const childSelect = document.getElementById('child-select');
       const childId = childSelect.value;
@@ -392,17 +394,24 @@
         timestamp: Date.now()
       };
 
+      // 1. Direct sync to Firebase Realtime Database (works on Cloudflare & Mobile)
+      fetch(`${FIREBASE_REST_URL}/locations/${childId}.json`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(payload)
+      })
+      .then(() => {
+        packetCount++;
+        document.getElementById('disp-packets').innerText = packetCount;
+      })
+      .catch(e => console.warn('Firebase direct sync note:', e));
+
+      // 2. Local Node backend notification (if running)
       fetch('/api/location', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(payload)
-      })
-      .then(r => r.json())
-      .then(res => {
-        packetCount++;
-        document.getElementById('disp-packets').innerText = packetCount;
-      })
-      .catch(e => console.error('Error posting location:', e));
+      }).catch(() => {});
     }
 
     function sendSOS() {
@@ -412,18 +421,28 @@
       const lat = parseFloat(document.getElementById('disp-lat').innerText) || 12.9756;
       const lng = parseFloat(document.getElementById('disp-lng').innerText) || 77.6402;
 
+      const alertPayload = {
+        childId,
+        childName,
+        lat,
+        lng,
+        battery: currentBattery,
+        emergencyType: '112 SOS PANIC',
+        timestamp: Date.now()
+      };
+
+      // Direct push to Firebase alerts
+      fetch(`${FIREBASE_REST_URL}/alerts/${Date.now()}.json`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(alertPayload)
+      }).catch(() => {});
+
       fetch('/api/emergency', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          childId,
-          childName,
-          lat,
-          lng,
-          battery: currentBattery,
-          emergencyType: '112 SOS PANIC'
-        })
-      });
+        body: JSON.stringify(alertPayload)
+      }).catch(() => {});
 
       alert('🚨 112 EMERGENCY ALERT SENT to Mummy & Papa with your live GPS location!');
     }

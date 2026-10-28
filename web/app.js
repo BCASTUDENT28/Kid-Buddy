@@ -1124,69 +1124,90 @@ function clearEventLog() {
 // ==========================================================================
 // Real-Time SSE Listener (Syncs Real Phone GPS & Firebase to Dashboard)
 // ==========================================================================
-function initLiveStreamSSE() {
-  if (typeof EventSource === 'undefined') return;
-  const es = new EventSource('/api/live-stream');
+function applyLocationUpdate(data) {
+  if (!data || !data.childId || !data.lat || !data.lng) return;
+  const child = state.children.find(c => c.id === data.childId);
+  if (child) {
+    if (Math.abs(child.lat - data.lat) < 0.00001 && Math.abs(child.lng - data.lng) < 0.00001) return;
 
-  es.addEventListener('connected', e => {
-    logEvent('🟢 Real-time Gateway connected to Firebase (surakshya-india).');
-  });
+    child.lat = data.lat;
+    child.lng = data.lng;
+    if (data.speed !== undefined) child.speed = data.speed;
+    if (data.accuracy !== undefined) child.accuracy = data.accuracy;
+    if (data.battery !== undefined) child.battery = data.battery;
+    child.locationName = `Real Mobile GPS: ${data.lat.toFixed(5)}, ${data.lng.toFixed(5)}`;
 
-  es.addEventListener('location_update', e => {
-    try {
-      const data = JSON.parse(e.data);
-      const child = state.children.find(c => c.id === data.childId);
-      if (child) {
-        child.lat = data.lat;
-        child.lng = data.lng;
-        child.speed = data.speed;
-        child.accuracy = data.accuracy;
-        if (data.battery) child.battery = data.battery;
-        child.locationName = `Real Mobile GPS: ${data.lat.toFixed(5)}, ${data.lng.toFixed(5)}`;
-
-        if (state.trackedChildId === child.id) {
-          if (trackingMarker && trackingMap) {
-            trackingMarker.setLatLng([child.lat, child.lng]);
-            trackingMap.panTo([child.lat, child.lng]);
-          }
-          updateChildQuickSheet();
-          updateTelemetryPanel();
-          checkGeofenceTriggers(child);
-        }
-
-        // Add to history timeline
-        const now = new Date();
-        const timeStr = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
-        child.history.unshift({
-          time: timeStr,
-          desc: 'Live Phone Coordinate Stream',
-          lat: data.lat,
-          lng: data.lng,
-          loc: `Live Accuracy ±${data.accuracy}m`
-        });
-        if (child.history.length > 20) child.history.pop();
-        renderHistoryTimeline();
-
-        logEvent(`[REAL GPS SYNC] ${child.name}: (${data.lat.toFixed(4)}, ${data.lng.toFixed(4)}) • ${data.speed} km/h • 🔋${child.battery}%`);
+    if (state.trackedChildId === child.id) {
+      if (trackingMarker && trackingMap) {
+        trackingMarker.setLatLng([child.lat, child.lng]);
+        trackingMap.panTo([child.lat, child.lng]);
       }
-    } catch (err) {
-      console.error('SSE Location Error:', err);
+      updateChildQuickSheet();
+      updateTelemetryPanel();
+      checkGeofenceTriggers(child);
     }
-  });
 
-  es.addEventListener('emergency_sos', e => {
+    const now = new Date();
+    const timeStr = `${String(now.getHours()).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}`;
+    child.history.unshift({
+      time: timeStr,
+      desc: 'Live Phone Coordinate Stream',
+      lat: data.lat,
+      lng: data.lng,
+      loc: `Live Accuracy ±${data.accuracy || 5}m`
+    });
+    if (child.history.length > 20) child.history.pop();
+    renderHistoryTimeline();
+
+    logEvent(`[REAL GPS SYNC] ${child.name}: (${data.lat.toFixed(4)}, ${data.lng.toFixed(4)}) • ${data.speed || 0} km/h • 🔋${child.battery}%`);
+  }
+}
+
+function initLiveStreamSSE() {
+  if (typeof EventSource !== 'undefined') {
+    const es = new EventSource('/api/live-stream');
+
+    es.addEventListener('connected', e => {
+      logEvent('🟢 Real-time Gateway connected to Firebase (surakshya-india).');
+    });
+
+    es.addEventListener('location_update', e => {
+      try {
+        applyLocationUpdate(JSON.parse(e.data));
+      } catch (err) {
+        console.error('SSE Location Error:', err);
+      }
+    });
+
+    es.addEventListener('emergency_sos', e => {
+      try {
+        const data = JSON.parse(e.data);
+        triggerEmergencyAlert('real_phone');
+        logEvent(`🚨 CRITICAL 112 SOS received from real smartphone for ${data.childName}!`);
+      } catch (err) {
+        console.error('SSE Alert Error:', err);
+      }
+    });
+
+    es.onerror = () => {
+      // Auto-reconnect handled by browser EventSource
+    };
+  }
+
+  // Direct Firebase RTDB sync fallback (makes Cloudflare deployment 100% serverless)
+  setInterval(async () => {
     try {
-      const data = JSON.parse(e.data);
-      triggerEmergencyAlert('real_phone');
-      logEvent(`🚨 CRITICAL 112 SOS received from real smartphone for ${data.childName}!`);
-    } catch (err) {
-      console.error('SSE Alert Error:', err);
+      const res = await fetch('https://surakshya-india-default-rtdb.asia-southeast1.firebasedatabase.app/locations.json');
+      if (!res.ok) return;
+      const data = await res.json();
+      if (!data) return;
+      Object.keys(data).forEach(id => {
+        applyLocationUpdate(data[id]);
+      });
+    } catch (e) {
+      // silent network fallback
     }
-  });
-
-  es.onerror = () => {
-    // Attempt auto-reconnect handled by browser EventSource
-  };
+  }, 2500);
 }
 
 function openPairPhoneModal() {
